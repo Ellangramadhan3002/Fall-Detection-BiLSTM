@@ -1,0 +1,13 @@
+{
+  "name": "bot_wa_api",
+  "version": "1.0.0",
+  "description": "API Bot WA using Baileys",
+  "main": "index.js",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc10",
+    "pino": "^10.3.1",
+    "qrcode-terminal": "^0.12.0",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}

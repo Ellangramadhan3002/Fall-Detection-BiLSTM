@@ -1,0 +1,20 @@
+# Environments
+env/
+.venv/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+
+# Large Datasets and Media (if any added later)
+*.mp4
+*.avi
+*.mkv
+
+# Ignore temporary database or logs if they get too large
+# database.db
+
+# Other temp files
+*.log

@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV Viewer Pro</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        darkBase: '#f0f4f8', // Putih agak biru (Light Slate)
+                        darkCard: '#ffffff', // Putih bersih
+                        darkBorder: '#cbd5e1', // Border abu-abu terang
+                        neonBlue: '#3b82f6',
+                        neonCyan: '#0ea5e9',
+                        neonOrange: '#f59e0b',
+                        neonRed: '#ef4444',
+                        neonGreen: '#10b981',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f0f4f8;
+            color: #0f172a;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(203, 213, 225, 0.6);
+        }
+
+        .cam-grid {
+            display: grid;
+            gap: 1rem;
+            height: calc(100vh - 140px);
+            padding: 1rem;
+        }
+
+        .layout-1x1 {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr;
+        }
+
+        .layout-1x2 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr;
+        }
+
+        .layout-2x2 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+
+        .cam-box {
+            position: relative;
+            background: #ffffff;
+            border-radius: 0.75rem;
+            border: 1px solid #cbd5e1;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+        }
+
+        .cam-stream {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+            background-color: #e2e8f0;
+            /* bg abu-abu muda di balik video */
+        }
+
+        /* Loader Animation */
+        .loader {
+            border: 3px solid rgba(245, 158, 11, 0.2);
+            border-top: 3px solid #f59e0b;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Modal Transitions */
+        .modal {
+            transition: opacity 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Table Styles */
+        tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        tr:hover {
+            background-color: #f1f5f9;
+        }
+    </style>
+</head>
+
+<body class="flex flex-col h-screen overflow-hidden antialiased">
+
+    <!-- Top Navigation Bar -->
+    <nav class="glass-panel flex justify-between items-center px-6 py-3 shadow-lg z-10 border-b border-darkBorder">
+        <div class="flex items-center gap-3">
+            <div
+                class="w-10 h-10 bg-gradient-to-br from-neonBlue to-blue-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(0,210,255,0.4)]">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+                    </path>
+                </svg>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-wide text-slate-800">CCTV Viewer Pro</h1>
+                <p class="text-xs text-slate-500">Live AI Fall Detection System</p>
+            </div>
+        </div>
+
+        <!-- Live Clock -->
+        <div class="text-center">
+            <div id="clock_time"
+                class="text-2xl font-bold tracking-widest text-neonCyan drop-shadow-[0_0_5px_rgba(0,229,255,0.5)]">
+                00:00:00</div>
+            <div id="clock_date" class="text-xs text-slate-500 font-medium">Memuat Tanggal...</div>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 bg-darkBase px-3 py-1.5 rounded-full border border-darkBorder text-sm">
+                <div class="w-2 h-2 rounded-full bg-neonGreen shadow-[0_0_8px_#10b981]"></div>
+                <span class="text-slate-700 font-medium"><span id="online_count">0</span> Online</span>
+            </div>
+            <div class="flex items-center gap-2 bg-darkBase px-3 py-1.5 rounded-full border border-darkBorder text-sm">
+                <div class="w-2 h-2 rounded-full bg-neonRed shadow-[0_0_8px_#ef4444]"></div>
+                <span class="text-slate-700 font-medium"><span id="offline_count">4</span> Offline</span>
+            </div>
+
+            <button onclick="toggleModal('settings-modal')"
+                class="p-2 ml-2 hover:bg-darkBorder rounded-lg transition border border-transparent hover:border-slate-600">
+                <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                    </path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+            </button>
+            <button onclick="toggleModal('database-modal')"
+                class="p-2 hover:bg-darkBorder rounded-lg transition border border-neonCyan text-neonCyan shadow-[0_0_10px_rgba(0,229,255,0.2)]">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Toolbar -->
+    <div class="px-6 py-3 border-b border-darkBorder flex justify-between items-center bg-darkBase">
+        <div class="flex items-center gap-4">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Layout:</span>
+            <div class="flex bg-darkCard rounded-lg p-1 border border-darkBorder">
+                <button onclick="setLayout('layout-1x1', this)"
+                    class="layout-btn px-3 py-1 text-sm rounded transition bg-gradient-to-r from-neonCyan to-blue-500 text-white font-bold shadow-[0_4px_10px_rgba(14,165,233,0.3)]">1x1</button>
+                <button onclick="setLayout('layout-1x2', this)"
+                    class="layout-btn px-3 py-1 text-sm rounded transition hover:bg-slate-200 hover:text-slate-800 text-slate-500 font-medium">1x2</button>
+                <button onclick="setLayout('layout-2x2', this)"
+                    class="layout-btn px-3 py-1 text-sm rounded transition hover:bg-slate-200 hover:text-slate-800 text-slate-500 font-medium">2x2</button>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <button id="btn-start-all" onclick="startDetection()"
+                class="px-4 py-1.5 rounded-lg border border-darkBorder bg-darkCard hover:bg-slate-100 transition text-sm font-medium flex items-center gap-2 text-slate-700">
+                <svg class="w-4 h-4 text-neonGreen" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                        clip-rule="evenodd"></path>
+                </svg> Mulai Semua
+            </button>
+            <button id="btn-stop-all" onclick="stopDetection()"
+                class="px-4 py-1.5 rounded-lg border border-darkBorder bg-darkCard hover:bg-slate-100 transition text-sm font-medium flex items-center gap-2 text-slate-700">
+                <div class="w-3 h-3 bg-neonRed rounded-sm shadow-[0_0_5px_#ef4444]"></div> Hentikan Semua
+            </button>
+            <button id="btn-record" onclick="toggleRecording()"
+                class="px-4 py-1.5 rounded-lg border border-neonRed bg-darkCard hover:bg-red-50 transition text-sm font-medium flex items-center gap-2 text-neonRed">
+                <div class="w-3 h-3 bg-neonRed rounded-full"></div>
+                <span id="btn-record-label">● Rekam Video</span>
+            </button>
+            <button id="btn-db-save" onclick="toggleDbSave()"
+                class="px-4 py-1.5 rounded-lg border border-neonGreen bg-green-50 hover:bg-green-100 transition text-sm font-medium flex items-center gap-2 text-green-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
+                    </path>
+                </svg>
+                <span id="btn-db-label">DB: AKTIF</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Camera Grid -->
+    <main class="flex-1 bg-slate-50">
+        <div id="video-grid" class="cam-grid layout-1x1">
+            <!-- Kamera akan digenerate secara dinamis oleh JavaScript -->
+        </div>
+    </main>
+
+    <!-- ======== MODALS ======== -->
+
+    <!-- Settings Modal -->
+    <div id="settings-modal"
+        class="modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+        <div
+            class="bg-darkBase border border-darkBorder w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center px-6 py-4 bg-darkCard border-b border-darkBorder">
+                <h2 class="text-lg font-bold flex items-center gap-2">
+                    <svg class="w-5 h-5 text-neonCyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                        </path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    Pengaturan Kamera & Deteksi
+                </h2>
+                <button onclick="toggleModal('settings-modal')"
+                    class="text-slate-500 hover:text-slate-800 transition bg-slate-100 p-1 rounded"><svg class="w-5 h-5"
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg></button>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scroll space-y-6">
+                <!-- Info banner -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
+                    <svg class="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <p>Masukkan URL RTSP masing-masing kamera. Sistem pendeteksi AI akan otomatis mengamankan kamera
+                        yang aktif.</p>
+                </div>
+
+
+                <!-- RTSP Inputs -->
+                <div class="space-y-4" id="camera-inputs-container">
+                    <!-- Dinamis via JS -->
+                </div>
+                <button onclick="addCameraInput()" class="mt-4 w-full border border-dashed border-slate-300 text-slate-500 hover:text-slate-700 hover:border-slate-400 hover:bg-slate-50 transition p-2 rounded flex items-center justify-center gap-2 text-sm font-medium">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Tambah Kamera Baru
+                </button>
+            </div>
+
+            <div class="px-6 py-4 border-t border-darkBorder bg-darkCard flex justify-between items-center">
+                <span id="url-save-status" class="text-xs text-neonGreen font-bold hidden">Perubahan URL Berhasil
+                    Diterapkan ✅</span>
+                <div class="flex gap-3 ml-auto">
+                    <button onclick="toggleModal('settings-modal')"
+                        class="px-5 py-2 text-sm font-medium text-slate-700 bg-slate-200 border border-slate-300 rounded-lg hover:bg-slate-300 transition">Batal</button>
+                    <button onclick="saveCameraSettings()"
+                        class="px-5 py-2 text-sm font-bold text-white bg-gradient-to-r from-neonCyan to-neonBlue rounded-lg shadow-[0_4px_15px_rgba(14,165,233,0.3)] flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7">
+                            </path>
+                        </svg> Terapkan URL
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Database Logs Modal -->
+    <div id="database-modal"
+        class="modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+        <div
+            class="bg-darkBase border border-darkBorder w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center px-6 py-4 bg-darkCard border-b border-darkBorder">
+                <h2 class="text-lg font-bold flex items-center gap-2 text-neonCyan">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4">
+                        </path>
+                    </svg>
+                    Database Kejadian Jatuh (SQLite Logs)
+                    <span id="logs-count" class="ml-2 text-xs font-normal bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200"></span>
+                </h2>
+                <div class="flex gap-2">
+                    <button onclick="clearDatabaseLogs()"
+                        class="text-xs border border-neonRed bg-red-100 px-3 py-1 rounded text-red-600 hover:bg-neonRed hover:text-white transition font-bold">Hapus
+                        Riwayat (Clear)</button>
+                    <button onclick="fetchDatabaseLogs()"
+                        class="text-xs bg-slate-200 px-3 py-1 rounded text-slate-700 hover:bg-slate-300 transition font-medium">Segarkan
+                        Data</button>
+                    <button onclick="toggleModal('database-modal')"
+                        class="text-slate-500 hover:text-slate-800 transition bg-slate-100 p-1 rounded"><svg
+                            class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg></button>
+                </div>
+            </div>
+
+            <div class="overflow-y-auto custom-scroll w-full p-4">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-darkCard px-4">
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                ID</th>
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                Kamera</th>
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                Waktu (Timestamp)</th>
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                Status</th>
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                Akurasi</th>
+
+                            <th
+                                class="py-3 px-4 text-xs font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                                Media</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body" class="text-sm">
+                        <tr>
+                            <td colspan="6" class="text-center py-6 text-slate-500">Memuat data dari database...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        function renderCameraGrid() {
+            const grid = document.getElementById('video-grid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= 4; i++) {
+                grid.innerHTML += `
+                    <div id="cam-box-${i}" class="cam-box group border-[#cbd5e1] shadow-sm transition">
+                        <img id="stream-cam${i}" src="" class="cam-stream hidden"
+                            onload="this.classList.remove('hidden'); document.getElementById('loader-${i}').classList.add('hidden');"
+                            onerror="handleStreamError(this, ${i})">
+                        <!-- Loading State -->
+                        <div id="loader-${i}" class="absolute flex flex-col items-center justify-center pointer-events-none">
+                            <div class="loader mb-4"></div>
+                            <p class="text-slate-600 text-sm font-medium mb-1">Menunggu Kam ${i}...</p>
+                        </div>
+                        <!-- Stats Info Block -->
+                        <div class="absolute bottom-12 left-3 bg-white/90 backdrop-blur-md border border-slate-200 rounded-lg p-2 flex flex-col gap-1 text-[10px] font-mono text-slate-700 shadow-sm">
+                            <div class="flex justify-between gap-4"><span>Status</span><span id="stat-val-${i}" class="text-slate-500">-</span></div>
+                            <div class="flex justify-between gap-4"><span>FPS</span><span id="fps-${i}" class="text-slate-500">0.0</span></div>
+                            <div class="flex justify-between gap-4"><span>Frame</span><span id="frame-${i}" class="text-slate-500">0</span></div>
+                            <div class="flex justify-between gap-4"><span>Conf</span><span id="conf-${i}" class="text-slate-500">0%</span></div>
+                        </div>
+                        <!-- Status Overlay -->
+                        <div class="absolute bottom-3 left-3 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full border border-slate-200 flex items-center gap-2 shadow-sm">
+                            <div id="status-bulb-${i}" class="w-2 h-2 rounded-full bg-slate-500"></div>
+                            <span id="status-text-${i}" class="text-xs font-bold text-slate-500 tracking-widest">OFFLINE</span>
+                        </div>
+                        <div class="absolute bottom-3 right-3 text-[10px] text-slate-500 font-mono clock-display">00:00:00</div>
+                    </div>
+                `;
+            }
+        }
+        renderCameraGrid();
+        // Clock functionality
+        function updateClock() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('id-ID', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const dateStr = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            document.getElementById('clock_time').textContent = timeStr.replace(/\./g, ':');
+            document.getElementById('clock_date').textContent = dateStr;
+
+            document.querySelectorAll('.clock-display').forEach(el => el.textContent = timeStr.replace(/\./g, ':'));
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Modals layout & Toggles
+        function toggleModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.toggle('active');
+            if (id === 'database-modal' && modal.classList.contains('active')) {
+                fetchDatabaseLogs();
+            }
+        }
+
+        function setLayout(className, btnElement) {
+            const grid = document.getElementById('video-grid');
+            grid.className = `cam-grid ${className}`;
+            
+            if (btnElement) {
+                const buttons = document.querySelectorAll('.layout-btn');
+                const activeClasses = ['bg-gradient-to-r', 'from-neonCyan', 'to-blue-500', 'text-white', 'font-bold', 'shadow-[0_4px_10px_rgba(14,165,233,0.3)]'];
+                const inactiveClasses = ['hover:bg-slate-200', 'hover:text-slate-800', 'text-slate-500', 'font-medium'];
+
+                buttons.forEach(btn => {
+                    btn.classList.remove(...activeClasses);
+                    btn.classList.add(...inactiveClasses);
+                });
+
+                btnElement.classList.remove(...inactiveClasses);
+                btnElement.classList.add(...activeClasses);
+            }
+        }
+
+        // Live API Polling from FastAPI
+        let isOnline = false;
+        async function fetchAPIStatus() {
+            try {
+                const response = await fetch('/status');
+                if (response.ok) {
+                    const statusData = await response.json();
+                    let onlineCount = 0;
+
+                    for (let i = 1; i <= 4; i++) {
+                        const camId = i.toString();
+                        const data = statusData[camId];
+                        
+                        const statusText = document.getElementById('status-text-' + i);
+                        const statusBulb = document.getElementById('status-bulb-' + i);
+                        const box = document.getElementById('cam-box-' + i);
+                        const fpsEl = document.getElementById('fps-' + i);
+                        const confEl = document.getElementById('conf-' + i);
+                        const frameEl = document.getElementById('frame-' + i);
+                        const statVal = document.getElementById('stat-val-' + i);
+                        const loader = document.getElementById('loader-' + i);
+                        const img = document.getElementById('stream-cam' + i);
+                        
+                        if (!data) {
+                            if (img && !img.classList.contains('hidden')) {
+                                handleStreamError(img, i);
+                            } else if (statusText) {
+                                statusText.textContent = "OFFLINE";
+                                statusText.className = "text-xs font-bold text-slate-500 tracking-widest";
+                                statusBulb.className = "w-2 h-2 rounded-full bg-slate-500";
+                            }
+                            continue;
+                        }
+
+                        // Kamera Online
+                        onlineCount++;
+                        if (img && img.classList.contains('hidden') && img.src && img.src.includes('video_feed')) {
+                            // If backend is returning status but image is somehow hidden and not empty
+                            // Wait for onload to unhide it
+                        }
+                        
+                        if(fpsEl) fpsEl.textContent = data.fps.toFixed(1);
+                        if(confEl) confEl.textContent = (data.confidence * 100).toFixed(1) + '%';
+                        if(frameEl && data.video_frame) frameEl.textContent = data.video_frame;
+
+                        if (data.status === "FALL") {
+                            if (!window['fallAlertActive' + i]) {
+                                window['fallAlertActive' + i] = true;
+                                if (window['fallAlertTimeout' + i]) clearTimeout(window['fallAlertTimeout' + i]);
+                                window['fallAlertTimeout' + i] = setTimeout(() => {
+                                    window['fallAlertActive' + i] = false;
+                                }, 5000);
+                            }
+                        }
+
+                        if (window['fallAlertActive' + i]) {
+                            if(statVal) { statVal.textContent = "JATUH!"; statVal.className = "text-neonRed font-bold animate-pulse"; }
+                            if(statusText) { statusText.textContent = "TERDETEKSI JATUH!"; statusText.className = "text-xs font-bold text-neonRed tracking-widest animate-pulse"; }
+                            if(statusBulb) statusBulb.className = "w-2 h-2 rounded-full bg-neonRed shadow-[0_0_15px_#ff2c55] animate-pulse";
+                            if(box) { box.style.borderColor = "rgba(255, 44, 85, 0.8)"; box.style.boxShadow = "0 0 30px rgba(255, 44, 85, 0.4)"; }
+                        } else {
+                            if(statVal) { statVal.textContent = "Normal"; statVal.className = "text-neonGreen"; }
+                            if(statusText) { statusText.textContent = "NORMAL ALIVE"; statusText.className = "text-xs font-bold text-neonGreen tracking-widest"; }
+                            if(statusBulb) statusBulb.className = "w-2 h-2 rounded-full bg-neonGreen shadow-[0_0_8px_#00ff88]";
+                            if(box) { box.style.borderColor = "#232b3e"; box.style.boxShadow = "none"; }
+                        }
+                    }
+
+                    isOnline = (onlineCount > 0);
+                    document.getElementById('online_count').textContent = onlineCount.toString();
+                    document.getElementById('offline_count').textContent = (4 - onlineCount).toString();
+                }
+            } catch (err) {
+                console.error("API disconnect", err);
+                if (isOnline) {
+                    isOnline = false;
+                    document.getElementById('online_count').textContent = '0';
+                    document.getElementById('offline_count').textContent = '4';
+                    for(let i=1; i<=4; i++) {
+                        const statusText = document.getElementById('status-text-' + i);
+                        const statusBulb = document.getElementById('status-bulb-' + i);
+                        if(statusText) { statusText.textContent = "OFFLINE"; statusText.className = "text-xs font-bold text-slate-500 tracking-widest"; }
+                        if(statusBulb) statusBulb.className = "w-2 h-2 rounded-full bg-slate-500";
+                    }
+                }
+            }
+        }
+
+        // Update dashboard every 200ms
+        setInterval(fetchAPIStatus, 200);
+
+        function handleStreamError(img, id) {
+            img.classList.add('hidden');
+            const loader = document.getElementById('loader-' + id);
+            if(loader) {
+                loader.classList.remove('hidden');
+                loader.innerHTML = `
+                <svg class="w-8 h-8 text-slate-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path><line x1="3" y1="3" x2="21" y2="21" stroke-width="2"></line></svg>
+                <p class="text-slate-500 text-sm font-medium">Kamera ${id} Offline</p>
+                `;
+            }
+        }
+
+        async function fetchDatabaseLogs() {
+            const tbody = document.getElementById('logs-table-body');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-slate-500">Memuat...</td></tr>';
+
+            try {
+                const res = await fetch('/logs');
+                const data = await res.json();
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-slate-500 text-sm italic">Belum ada riwayat jatuh yang tercatat di Database SQLite.</td></tr>';
+                    return;
+                }
+
+                // Tampilkan total rekaman
+                const countEl = document.getElementById('logs-count');
+                if (countEl) countEl.textContent = `Total: ${data.length} rekaman`;
+
+                tbody.innerHTML = '';
+                data.forEach((log, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b border-slate-200/80 transition hover:bg-slate-50';
+                    const filename = (log.media_path || '').split('\\').pop().split('/').pop() || 'No File';
+                    const mediaLabel = log.media_path ? `[${(log.media_type||'file').toUpperCase()}] ${filename}` : 'Tidak Ada';
+                    const hasFile = !!log.media_path;
+                    row.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-xs text-slate-500">#${log.id}</td>
+                    <td class="py-3 px-4 font-bold text-slate-800">${log.camera_id}</td>
+                    <td class="py-3 px-4 text-slate-600 text-xs">${new Date(log.timestamp).toLocaleString('id-ID')}</td>
+                    <td class="py-3 px-4"><span class="bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded text-xs font-bold animate-pulse">${log.status}</span></td>
+                    <td class="py-3 px-4 font-mono text-neonCyan">${(log.confidence * 100).toFixed(1)}%</td>
+
+                    <td class="py-3 px-4">
+                        ${hasFile
+                            ? `<button onclick="openMedia('${log.media_path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')"
+                                class="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-xs font-medium truncate max-w-[160px] inline-block cursor-pointer transition"
+                                title="Klik untuk membuka file: ${log.media_path}">
+                                🎥 ${filename}
+                              </button>`
+                            : '<span class="text-slate-400 text-xs">-</span>'
+                        }
+                    </td>
+                `;
+                    tbody.appendChild(row);
+                });
+            } catch (err) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-red-500">Gagal terhubung ke Database.</td></tr>';
+            }
+        }
+
+        async function openMedia(filePath) {
+            try {
+                const encoded = encodeURIComponent(filePath);
+                const res = await fetch(`/open-media?path=${encoded}`);
+                const data = await res.json();
+                if (data.error) {
+                    alert('Gagal membuka file:\n' + data.error);
+                }
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        }
+
+        async function saveMediaMode() {
+            const radios = document.getElementsByName('media_mode');
+            let selectedMode = 'image';
+            for (let i = 0, length = radios.length; i < length; i++) {
+                if (radios[i].checked) { selectedMode = radios[i].value; break; }
+            }
+
+            try {
+                await fetch(`/settings/media_mode?mode=${selectedMode}`, { method: 'POST' });
+                const status = document.getElementById('mode-save-status');
+                status.classList.remove('hidden');
+                setTimeout(() => status.classList.add('hidden'), 3000);
+            } catch (e) {
+                alert("Gagal merubah setting mode database.");
+            }
+        }
+
+        async function saveCameraSettings() {
+            const inputs = document.querySelectorAll('.camera-url-input');
+            const urls = Array.from(inputs).map(input => input.value);
+            
+            try {
+                const res = await fetch('/settings/camera', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls: urls })
+                });
+                if (res.ok) {
+                    const status = document.getElementById('url-save-status');
+                    status.classList.remove('hidden');
+                    
+                    for(let i=1; i<=urls.length; i++) {
+                        const img = document.getElementById('stream-cam' + i);
+                        const loader = document.getElementById('loader-' + i);
+                        if (img && urls[i-1].trim() !== "") {
+                            img.src = "/video_feed/" + i + "?t=" + new Date().getTime();
+                            if(loader) {
+                                loader.classList.remove('hidden');
+                                loader.innerHTML = `<div class="loader mb-4"></div><p class="text-slate-600 text-sm font-medium mb-1">Mengkoneksikan Kam ${i}...</p>`;
+                            }
+                        } else if (img) {
+                            img.src = "";
+                            handleStreamError(img, i);
+                        }
+                    }
+
+                    setTimeout(() => {
+                        status.classList.add('hidden');
+                        toggleModal('settings-modal');
+                    }, 1500);
+                }
+            } catch (e) {
+                alert("Error saat merubah sistem kamera di Python: " + e.message);
+            }
+        }
+
+        async function clearDatabaseLogs() {
+            if (!confirm("Anda yakin ingin menghapus SELURUH riwayat dan gambar jatuh? Laporan skripsi akan hilang lho!")) return;
+            try {
+                const res = await fetch('/logs', { method: 'DELETE' });
+                if (res.ok) {
+                    alert("Database berhasil dikosongkan!");
+                    fetchDatabaseLogs(); // refresh table
+                }
+            } catch (e) {
+                alert("Gagal menghapus database.");
+            }
+        }
+
+        // === Kontrol Deteksi (Mulai/Hentikan Semua) ===
+        async function startDetection() {
+            try {
+                await fetch('/detection/start', { method: 'POST' });
+                document.getElementById('btn-start-all').classList.add('bg-green-100', 'border-neonGreen', 'text-neonGreen');
+                document.getElementById('btn-stop-all').classList.remove('bg-red-100', 'border-neonRed', 'text-neonRed');
+                console.log('[DETEKSI] AI Diaktifkan');
+            } catch (e) { alert('Gagal mengaktifkan deteksi'); }
+        }
+
+        async function stopDetection() {
+            try {
+                await fetch('/detection/stop', { method: 'POST' });
+                document.getElementById('btn-stop-all').classList.add('bg-red-100', 'border-neonRed', 'text-neonRed');
+                document.getElementById('btn-start-all').classList.remove('bg-green-100', 'border-neonGreen', 'text-neonGreen');
+                console.log('[DETEKSI] AI Dihentikan');
+            } catch (e) { alert('Gagal menghentikan deteksi'); }
+        }
+
+        // === Rekam Video Bersih ke Disk E ===
+        let isCurrentlyRecording = false;
+        async function toggleRecording() {
+            const btn = document.getElementById('btn-record');
+            const label = document.getElementById('btn-record-label');
+            try {
+                if (!isCurrentlyRecording) {
+                    const res = await fetch('/recording/start', { method: 'POST' });
+                    const data = await res.json();
+                    isCurrentlyRecording = true;
+                    label.textContent = '⏹ Stop Rekam';
+                    btn.classList.remove('border-neonRed', 'text-neonRed');
+                    btn.classList.add('border-red-700', 'bg-red-100', 'text-red-700', 'animate-pulse');
+                    console.log('[REC] Mulai merekam:', data.path);
+                } else {
+                    const res = await fetch('/recording/stop', { method: 'POST' });
+                    const data = await res.json();
+                    isCurrentlyRecording = false;
+                    label.textContent = '● Rekam Video';
+                    btn.classList.add('border-neonRed', 'text-neonRed');
+                    btn.classList.remove('border-red-700', 'bg-red-100', 'text-red-700', 'animate-pulse');
+                    alert('✅ Video tersimpan di:\n' + (data.path || 'E:\\FALL_DETECTION_RECORDINGS'));
+                }
+            } catch (e) { alert('Gagal mengontrol perekaman'); }
+        }
+
+        // === Toggle Simpan ke Database ===
+        let isDbSaveActive = true;
+        async function toggleDbSave() {
+            try {
+                const res = await fetch('/recording/toggle_db', { method: 'POST' });
+                const data = await res.json();
+                isDbSaveActive = data.db_save_active;
+
+                const btn = document.getElementById('btn-db-save');
+                const label = document.getElementById('btn-db-label');
+
+                if (isDbSaveActive) {
+                    btn.classList.remove('border-slate-400', 'bg-slate-100', 'text-slate-500');
+                    btn.classList.add('border-neonGreen', 'bg-green-50', 'text-green-700');
+                    label.textContent = "DB: AKTIF";
+                } else {
+                    btn.classList.remove('border-neonGreen', 'bg-green-50', 'text-green-700');
+                    btn.classList.add('border-slate-400', 'bg-slate-100', 'text-slate-500');
+                    label.textContent = "DB: MATI (Uji Coba)";
+                }
+            } catch (e) { alert('Gagal merubah mode database'); }
+        }
+
+        let cameraCount = 0;
+        
+        function addCameraInput(url = "") {
+            if (cameraCount >= 4) {
+                alert("Batas maksimal adalah 4 kamera untuk layout saat ini.");
+                return;
+            }
+            cameraCount++;
+            const container = document.getElementById('camera-inputs-container');
+            const div = document.createElement('div');
+            div.className = "bg-darkCard p-4 rounded-lg border border-darkBorder shadow-sm transition focus-within:border-neonCyan camera-input-wrapper";
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-gradient-to-br from-neonCyan to-blue-600 text-white w-6 h-6 rounded flex items-center justify-center font-bold text-xs shadow-sm">${cameraCount}</div>
+                        <h3 class="font-bold text-sm text-slate-800">Kamera ${cameraCount}</h3>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.querySelector('.camera-url-input').value=''; this.parentElement.parentElement.classList.add('hidden'); setTimeout(() => {this.parentElement.parentElement.remove(); updateCameraNumbers();}, 100);" class="text-red-500 hover:bg-red-50 p-1 rounded transition ${cameraCount === 1 ? 'hidden' : ''}" title="Hapus Kamera">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <input type="text" class="camera-url-input w-full bg-darkBase border border-darkBorder rounded text-sm text-slate-800 px-3 py-2 outline-none focus:border-neonCyan transition" value="${url}" placeholder="File .mp4 Lokal atau rtsp://...">
+            `;
+            container.appendChild(div);
+            updateCameraNumbers();
+        }
+
+        function updateCameraNumbers() {
+            const items = document.querySelectorAll('.camera-input-wrapper');
+            cameraCount = items.length;
+            items.forEach((item, index) => {
+                const numberCircle = item.querySelector('.bg-gradient-to-br');
+                const title = item.querySelector('h3');
+                const btnRemove = item.querySelector('button');
+                
+                numberCircle.textContent = index + 1;
+                title.textContent = "Kamera " + (index + 1);
+                
+                if (index === 0) {
+                    btnRemove.classList.add('hidden');
+                } else {
+                    btnRemove.classList.remove('hidden');
+                }
+            });
+        }
+        
+        // Inisialisasi awal 4 kamera form
+        document.addEventListener("DOMContentLoaded", () => {
+            // Simulasi load awal untuk form
+            addCameraInput("D:/SMSTR 6/Lansia/orang tua/archive/dataset_action_split/test/Lying Down/video_1.avi"); // Kamera 1
+            addCameraInput(""); // Kamera 2
+            addCameraInput(""); // Kamera 3
+            addCameraInput(""); // Kamera 4
+            
+            // Set sumber awal ke img tag untuk kamera 1
+            setTimeout(() => {
+                const img1 = document.getElementById('stream-cam1');
+                if(img1) img1.src = "/video_feed/1";
+            }, 500);
+        });
+
+    </script>
+</body>
+
+</html>
